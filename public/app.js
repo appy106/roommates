@@ -95,7 +95,8 @@ function renderLogin(mode = "login", errMsg = "") {
   `;
   document.getElementById("tab-login").onclick = () => renderLogin("login");
   document.getElementById("tab-signup").onclick = () => renderLogin("signup");
-  document.getElementById("forgot").onclick = (e) => { e.preventDefault(); renderForgot(); };
+  const forgotLink = document.getElementById("forgot");
+  if (forgotLink) forgotLink.onclick = (e) => { e.preventDefault(); renderForgot(); };
   document.getElementById("submit-auth").onclick = async () => {
     const email = document.getElementById("email").value.trim();
     const password = document.getElementById("password").value;
