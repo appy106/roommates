@@ -1,4 +1,4 @@
-const CACHE = "the-board-v1";
+const CACHE = "the-board-v2";
 const SHELL = ["/", "/styles.css", "/app.js", "/api.js", "/manifest.json"];
 
 self.addEventListener("install", (e) => {
@@ -13,11 +13,16 @@ self.addEventListener("activate", (e) => {
   self.clients.claim();
 });
 
-// Network-first for API calls (always want fresh data), cache-first for the app shell.
 self.addEventListener("fetch", (e) => {
   const url = new URL(e.request.url);
-  if (url.pathname.startsWith("/api/")) return; // never cache API responses
+  if (url.pathname.startsWith("/api/")) return;
   e.respondWith(
-    caches.match(e.request).then((cached) => cached || fetch(e.request))
+    fetch(e.request)
+      .then((res) => {
+        const copy = res.clone();
+        caches.open(CACHE).then((c) => c.put(e.request, copy));
+        return res;
+      })
+      .catch(() => caches.match(e.request))
   );
 });
