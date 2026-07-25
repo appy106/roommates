@@ -1,9 +1,5 @@
 const root = document.getElementById("root");
 
-if ("serviceWorker" in navigator) {
-  window.addEventListener("load", () => navigator.serviceWorker.register("/sw.js").catch(() => {}));
-}
-
 const state = {
   user: null,
   householdId: null,
@@ -196,6 +192,7 @@ function renderApp() {
           ${me.households.map((x) => `<option value="${x.id}" ${x.id === state.householdId ? "selected" : ""}>${esc(x.name)}</option>`).join("")}
         </select>
         ${avatarHtml(me.email, 28)}
+        <button class="btn-ghost" id="change-pw-btn">Change password</button>
         <button class="btn-ghost" id="logout">Log out</button>
       </div>
     </div>
@@ -208,12 +205,47 @@ function renderApp() {
     </div>
   `;
   document.getElementById("logout").onclick = doLogout;
+  document.getElementById("change-pw-btn").onclick = renderChangePassword;
   document.getElementById("household-switch").onchange = (e) => switchHousehold(e.target.value);
   document.getElementById("new-household").onclick = (e) => { e.preventDefault(); state.view = "setup"; render(); };
   document.querySelectorAll("#tabs .tab").forEach((el) => {
     el.onclick = () => { state.tab = el.dataset.tab; render(); };
   });
   renderTabContent();
+}
+
+function renderChangePassword() {
+  root.innerHTML = `
+    <h1 class="brand">Change password</h1>
+    <div class="card stack">
+      <input id="current-pw" type="password" placeholder="Current password" />
+      <input id="new-pw" type="password" placeholder="New password (min 8 characters)" />
+      <input id="new-pw2" type="password" placeholder="Confirm new password" />
+      <div id="cp-msg"></div>
+      <button class="btn-primary" id="cp-submit">Update password</button>
+      <a href="#" id="cp-back" class="muted">Back</a>
+    </div>
+  `;
+  document.getElementById("cp-back").onclick = (e) => { e.preventDefault(); renderApp(); };
+  document.getElementById("cp-submit").onclick = async () => {
+    const currentPassword = document.getElementById("current-pw").value;
+    const newPassword = document.getElementById("new-pw").value;
+    const confirm = document.getElementById("new-pw2").value;
+    const msg = document.getElementById("cp-msg");
+    if (newPassword !== confirm) {
+      msg.className = "error";
+      msg.textContent = "New passwords don't match.";
+      return;
+    }
+    try {
+      await api("/auth/change-password", { method: "POST", body: { currentPassword, newPassword } });
+      msg.className = "success";
+      msg.textContent = "Password updated.";
+    } catch (e) {
+      msg.className = "error";
+      msg.textContent = e.message;
+    }
+  };
 }
 
 function tabDef() {
@@ -326,6 +358,7 @@ async function renderChores(el) {
           <option value="weekly" selected>Weekly</option>
           <option value="monthly">Monthly</option>
         </select>
+        <input id="chore-duedate" type="date" style="max-width:150px;" />
         <button class="btn-primary" id="add-chore">Add</button>
       </div>
     </div>
@@ -340,13 +373,16 @@ async function renderChores(el) {
         <div style="${c.done ? "text-decoration:line-through;" : ""}">${esc(c.task)}</div>
         <div class="muted">${email} · ${c.assignment_type === "auto" ? c.frequency : "manual"}${c.next_due ? " · due " + c.next_due : ""}</div>
       </div>
+      ${c.assignment_type === "manual" ? `<input type="date" class="duedate-input" data-id="${c.id}" value="${c.next_due || ""}" style="max-width:140px;" />` : ""}
       <button class="btn-ghost pass-btn" data-id="${c.id}" style="padding:4px 8px;">↻</button>
       <button class="btn-ghost done-btn" data-id="${c.id}" data-done="${c.done}" style="padding:4px 8px;">✓</button>
       <button class="btn-ghost del-btn" data-id="${c.id}" style="padding:4px 8px;">×</button>
     </div>`;
   }
   document.getElementById("chore-type").onchange = (e) => {
-    document.getElementById("chore-freq").style.display = e.target.value === "auto" ? "block" : "none";
+    const isAuto = e.target.value === "auto";
+    document.getElementById("chore-freq").style.display = isAuto ? "block" : "none";
+    document.getElementById("chore-duedate").style.display = isAuto ? "none" : "block";
   };
   document.getElementById("add-chore").onclick = async () => {
     const task = document.getElementById("chore-name").value.trim();
@@ -354,14 +390,30 @@ async function renderChores(el) {
     const assignmentType = document.getElementById("chore-type").value;
     const assignedTo = document.getElementById("chore-assignee").value;
     const frequency = document.getElementById("chore-freq").value;
+    const dueDate = document.getElementById("chore-duedate").value;
     try {
       await api(`/households/${state.householdId}/chores`, {
         method: "POST",
-        body: { task, assignmentType, assignedTo, frequency: assignmentType === "auto" ? frequency : null },
+        body: {
+          task,
+          assignmentType,
+          assignedTo,
+          frequency: assignmentType === "auto" ? frequency : null,
+          dueDate: assignmentType === "manual" ? dueDate : null,
+        },
       });
       renderTabContent();
     } catch (e) { alert(e.message); }
   };
+  el.querySelectorAll(".duedate-input").forEach((inp) => {
+    inp.onchange = async () => {
+      await api(`/households/${state.householdId}/chores/${inp.dataset.id}`, {
+        method: "PATCH",
+        body: { dueDate: inp.value },
+      });
+      renderTabContent();
+    };
+  });
   el.querySelectorAll(".pass-btn").forEach((b) => b.onclick = async () => {
     await api(`/households/${state.householdId}/chores/${b.dataset.id}/pass`, { method: "POST" });
     renderTabContent();
