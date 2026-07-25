@@ -39,6 +39,13 @@ input, select {
 input:focus, select:focus { border-color: #E3A343; }
 input::placeholder { color: #6B7268; }
 
+input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  accent-color: #E3A343;
+}
+
 button {
   cursor: pointer;
   font-family: inherit;
