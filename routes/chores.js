@@ -43,7 +43,7 @@ router.get("/", (req, res) => {
 });
 
 router.post("/", (req, res) => {
-  const { task, assignmentType, assignedTo, frequency } = req.body || {};
+  const { task, assignmentType, assignedTo, frequency, dueDate } = req.body || {};
   if (!task || !task.trim()) return res.status(400).json({ error: "Chore name is required." });
   if (!["manual", "auto"].includes(assignmentType)) {
     return res.status(400).json({ error: "Assignment type must be manual or auto." });
@@ -54,6 +54,8 @@ router.post("/", (req, res) => {
   let nextDue = null;
   if (assignmentType === "auto") {
     nextDue = addDays(new Date().toISOString().slice(0, 10), FREQ_DAYS[frequency]);
+  } else if (dueDate) {
+    nextDue = dueDate; // manual chores can optionally carry a due date too
   }
   const id = nanoid();
   db.prepare(
@@ -64,7 +66,7 @@ router.post("/", (req, res) => {
 });
 
 router.patch("/:choreId", (req, res) => {
-  const { done } = req.body || {};
+  const { done, dueDate } = req.body || {};
   const chore = db
     .prepare("SELECT * FROM chores WHERE id = ? AND household_id = ?")
     .get(req.params.choreId, req.params.householdId);
@@ -77,6 +79,13 @@ router.patch("/:choreId", (req, res) => {
     db.prepare(
       "UPDATE chores SET done = 0, assigned_to = ?, next_due = ? WHERE id = ?"
     ).run(next, nextDue, chore.id);
+  } else if (dueDate !== undefined && chore.assignment_type === "manual") {
+    // manual chores can have their due date edited directly (auto chores compute it from frequency)
+    db.prepare("UPDATE chores SET next_due = ?, done = ? WHERE id = ?").run(
+      dueDate || null,
+      done ? 1 : 0,
+      chore.id
+    );
   } else {
     db.prepare("UPDATE chores SET done = ? WHERE id = ?").run(done ? 1 : 0, chore.id);
   }
